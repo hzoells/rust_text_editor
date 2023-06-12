@@ -1,12 +1,15 @@
 use crate::SearchDirection;
+use crate::highlighting;
 
-use std::cmp;
+use std::{cmp, fmt::format};
 use unicode_segmentation::UnicodeSegmentation;
+use termion::color;
 
 #[derive(Default)]
 pub struct Row {
     string: String,
     len: usize,
+    highlighting: Vec<highlighting::Type>,
 }
 
 impl From<&str> for Row {
@@ -14,6 +17,7 @@ impl From<&str> for Row {
         Self {
             string: String::from(slice),
             len: slice.grapheme_indices(true).count(),
+            highlighting: Vec::new(),
         }
     }
 }
@@ -25,11 +29,18 @@ impl Row {
 
         let mut result = String::new();
         #[allow(clippy::integer_arithmetic)]
-        for grapheme in self.string[..].graphemes(true).skip(start).take(end-start) {
-            if grapheme == "\t" {
-                result.push_str("  ");
-            } else {
-                result.push_str(grapheme);
+        for (index, grapheme) in self.string[..].graphemes(true).enumerate().skip(start).take(end-start) {
+            if let Some(c) = grapheme.chars().next() {
+                let highlighting = self.highlighting.get(index).unwrap_or(&highlighting::Type::None);
+                let hightlight_color = format!("{}", color::Fg(highlighting.to_color()));
+                result.push_str(&hightlight_color[..]);
+                if c == '\t' {
+                    result.push_str("  ");
+                } else {
+                    result.push_str(grapheme);
+                }
+                let hightlight_reset = format!("{}", color::Fg(color::Reset));
+                result.push_str(&hightlight_reset[..]);
             }
         }
         result
@@ -96,6 +107,7 @@ impl Row {
         Self {
             string: new_row,
             len: new_row_length,
+            highlighting: Vec::new(),
         }
     }
 
@@ -135,6 +147,18 @@ impl Row {
             }
         }
         None
+    }
+
+    pub fn hightlight(&mut self) {
+        let mut highlighting: Vec<highlighting::Type> = Vec::new();
+        for c in self.string.chars() {
+            if c.is_ascii_digit() {
+                highlighting.push(highlighting::Type::Number);
+            } else {
+                highlighting.push(highlighting::Type::None);
+            }
+        }
+        self.highlighting = highlighting;
     }
 
     pub fn len(&self) -> usize {
